@@ -87,6 +87,17 @@ const TILE_HEIGHT_PX: usize = 1024;
 /// Page textures are kept for pages within this many viewport heights of the view; farther ones
 /// are rendered again when they come back.
 const TEXTURE_KEEP_SCREENS: f32 = 3.0;
+/// Keep a viewer's page raster while pinch updates arrive, then sharpen after a short pause.
+const VIEWER_ZOOM_SETTLE_SECONDS: f64 = 0.18;
+
+fn viewer_zoom_raster(previous: Option<(f32, f64)>, now: f64, changed: bool, displayed_scale: f32) -> Option<(f32, f64)> {
+    if changed {
+        let scale = previous.filter(|(_, last)| now - last < VIEWER_ZOOM_SETTLE_SECONDS).map_or(displayed_scale, |(scale, _)| scale);
+        Some((scale, now))
+    } else {
+        previous.filter(|(_, last)| now - last < VIEWER_ZOOM_SETTLE_SECONDS)
+    }
+}
 
 pub struct CanvasState {
     textures: HashMap<usize, (u64, TextureHandle)>,
@@ -532,9 +543,29 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let animate = app.animations_on();
     let opts = ui.ctx().options(|o| o.input_options);
     let zoom_delta = ui.input(|i| app.canvas.wheel.zoom(i, &opts, animate));
+    let zoom_changed = (zoom_delta - 1.0).abs() > 1e-3 && ui.rect_contains_pointer(area);
+    let raster_id = app.window_id("viewer_zoom_raster");
+    let now = ui.input(|i| i.time);
+    let held_raster = if app.services.view_only {
+        let previous = ui.ctx().data(|data| data.get_temp::<(f32, f64)>(raster_id));
+        let next = viewer_zoom_raster(previous, now, zoom_changed, app.canvas.scale);
+        ui.ctx().data_mut(|data| {
+            if let Some(next) = next {
+                data.insert_temp(raster_id, next);
+            } else {
+                data.remove::<(f32, f64)>(raster_id);
+            }
+        });
+        if let Some((_, last)) = next {
+            ui.ctx().request_repaint_after(std::time::Duration::from_secs_f64((VIEWER_ZOOM_SETTLE_SECONDS - (now - last)).max(0.001)));
+        }
+        next.map(|(scale, _)| scale)
+    } else {
+        None
+    };
     // The page point under the pointer before the zoom: it is kept under the pointer (#1223).
     let mut zoom_anchor = None;
-    if (zoom_delta - 1.0).abs() > 1e-3 && ui.rect_contains_pointer(area) {
+    if zoom_changed {
         let reading = app.session.view.read_mode;
         if !reading && let Some(p) = ui.input(|i| i.pointer.latest_pos()) {
             zoom_anchor = page_at(&app.canvas.page_rects, &layout, app.canvas.scale, p).map(|at| (p, at));
@@ -754,7 +785,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             let (band_top, band_bot) = geo.bands.get(i).copied().unwrap_or((0.0, sr.height()));
             // A Web/Draft page can be arbitrarily tall. Shrinking the whole page into one GPU
             // texture makes the text blurry; split those pages into native-resolution tiles.
-            let width_scale = (geo.scale * ppp).min(max_tex / page.w.max(1.0)).max(0.05);
+            let width_scale = (held_raster.unwrap_or(geo.scale) * ppp).min(max_tex / page.w.max(1.0)).max(0.05);
             let tiled = page.h.clamp(1.0, 1e6) * width_scale > max_tex;
             let scale_px = if tiled { width_scale } else { width_scale.min(max_tex / page.h.clamp(1.0, 1e6)).max(0.05) };
             let tile_height_px = TILE_HEIGHT_PX.min(max_tex as usize).max(1);

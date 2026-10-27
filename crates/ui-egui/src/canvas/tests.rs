@@ -4798,3 +4798,12 @@ fn the_view_key_changes_when_a_drag_takes_an_object_off_the_page() {
     assert_ne!(hidden, view_key(&app, false, None), "the page without the dragged object is rendered again");
     assert_eq!(hidden, view_key(&app, false, Some(&object)), "the same drag keeps the key: no re-render every frame");
 }
+#[test]
+fn viewer_zoom_reuses_raster_until_gesture_settles() {
+    let first = super::viewer_zoom_raster(None, 1.0, true, 1.3).unwrap();
+    let next = super::viewer_zoom_raster(Some(first), 1.1, true, 1.5).unwrap();
+    assert_eq!(next.0, 1.3);
+    assert_eq!(super::viewer_zoom_raster(Some(next), 1.2, false, 1.6), Some(next));
+    assert_eq!(super::viewer_zoom_raster(Some(next), 1.3, false, 1.6), None);
+    assert_eq!(super::viewer_zoom_raster(Some(next), 1.3, true, 1.6), Some((1.6, 1.3)));
+}
