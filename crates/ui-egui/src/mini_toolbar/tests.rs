@@ -28,6 +28,18 @@ fn reading_mode_hides_formatting_even_with_an_existing_selection() {
 }
 
 #[test]
+fn viewer_hides_selection_and_context_formatting() {
+    let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+    app.run("text.insert", json!({"text": "Selectable text"})).unwrap();
+    app.run("select.all", json!({})).unwrap();
+    assert!(visible(&app));
+    app.services.view_only = true;
+    assert!(!visible(&app));
+    assert!(!context_menu_visible(&app));
+    assert!(!app.session.sel.is_collapsed());
+}
+
+#[test]
 fn sits_above_the_selection_when_there_is_room() {
     let left = vp().center().x;
     let r = anchor_rect(400.0, left, vp()).unwrap_or(Rect::EVERYTHING);

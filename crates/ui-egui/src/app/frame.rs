@@ -31,7 +31,38 @@ impl WordApp {
     pub(super) fn paint_window(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, t: theme::Tokens) {
         let window = self.windows.shown();
         let moved = |app: &WordApp| app.windows.shown() != window;
-        if self.ui.backstage {
+        if self.services.view_only {
+            egui::Panel::top("viewer_toolbar").exact_size(44.0).show(ui, |ui| {
+                ui.horizontal_centered(|ui| {
+                    ui.strong(self.title_stem());
+                    ui.separator();
+                    if ui.button("Find & navigate").clicked() {
+                        let _ = self.run("view.navigationPane", json!({}));
+                    }
+                    ui.separator();
+                    if ui.button("−").on_hover_text("Zoom out").clicked() {
+                        let _ = self.run("view.zoomOut", json!({}));
+                    }
+                    ui.label(format!("{}%", (self.session.view.zoom * 100.0).round() as u32));
+                    if ui.button("+").on_hover_text("Zoom in").clicked() {
+                        let _ = self.run("view.zoomIn", json!({}));
+                    }
+                    ui.separator();
+                    if ui.button("Page width").clicked() {
+                        let _ = self.run("view.pageWidth", json!({}));
+                    }
+                    if ui.button("Whole page").clicked() {
+                        let _ = self.run("view.onePage", json!({}));
+                    }
+                });
+            });
+            panes::show(self, ui);
+            egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.canvas)).show(ui, |ui| {
+                if self.has_document() {
+                    canvas::show(self, ui);
+                }
+            });
+        } else if self.ui.backstage {
             backstage::show(self, ui);
         } else if !self.has_document() {
             // No document open (#1129): the ribbon greyed out but for Help, and no page.

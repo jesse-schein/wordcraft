@@ -1,5 +1,24 @@
 use super::*;
 
+/// Commands exposed by an embedded reader. Default-deny keeps new editing commands out.
+fn viewer_command(id: &str) -> bool {
+    matches!(
+        id,
+        "file.open"
+            | "view.printLayout"
+            | "view.zoom"
+            | "view.zoomIn"
+            | "view.zoomOut"
+            | "view.pageWidth"
+            | "view.onePage"
+            | "view.navigationPane"
+            | "edit.copy"
+            | "edit.goto"
+            | "select.range"
+            | "caret.set"
+    )
+}
+
 impl WordApp {
     /// `run` for a command a mouse drag on a table sends: the view stays where it is.
     pub(crate) fn run_keep_view(&mut self, id: &str, params: Value) -> Result<Value, String> {
@@ -24,6 +43,9 @@ impl WordApp {
     /// Close, Envelopes, Labels and Finish & Merge on a document with unsaved changes first ask
     /// Save / Don't Save / Cancel, and the command runs once that is answered (`ui.saveChanges`).
     pub fn run(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        if self.services.view_only && !viewer_command(id) {
+            return Err("This viewer does not allow editing".into());
+        }
         // Comment text still being typed is written first, so a save or export has it and a
         // close, New or Open counts it as a change (#1348). A draft the document refuses is not
         // part of it: saving and exporting go on without it (the refusal stays on the status
@@ -108,6 +130,9 @@ impl WordApp {
     /// Run a command for a script or an agent (control channel, MCP bridge): never asks first.
     /// UI-level commands (`ui.*`) are handled here, the rest by the engine.
     pub fn execute(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        if self.services.view_only && !viewer_command(id) {
+            return Err("This viewer does not allow editing".into());
+        }
         // A pending Change Picture only survives until the next action (#147).
         if !matches!(id, "ui.changePicture" | "picture.change" | "insert.picture") {
             self.change_picture_target = None;
@@ -1024,4 +1049,23 @@ fn flushes_comment_drafts(id: &str, params: &Value) -> bool {
 /// replace only an untouched blank document, which has nothing to lose).
 pub(crate) fn discards_document(id: &str, _params: &Value) -> bool {
     id == "file.close"
+}
+
+#[cfg(test)]
+mod viewer_tests {
+    use super::*;
+
+    #[test]
+    fn viewer_blocks_editing_and_other_layouts() {
+        let services = Services { view_only: true, ..Default::default() };
+        let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text("Hello")), services);
+        assert!(app.run("view.printLayout", json!({})).is_ok());
+        assert!(app.run("view.readMode", json!({})).is_err());
+        assert!(app.run("view.pageWidth", json!({})).is_ok());
+        assert!(app.run("edit.goto", json!({"page": 1})).is_ok());
+        assert!(app.run("file.save", json!({})).is_err());
+        assert!(app.run("text.insert", json!({"text": "changed"})).is_err());
+        assert!(app.execute("text.insert", json!({"text": "changed"})).is_err());
+        assert!(!app.session.view.read_mode);
+    }
 }

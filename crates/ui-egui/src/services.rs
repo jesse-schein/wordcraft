@@ -4,6 +4,8 @@ use super::*;
 /// Platform services injected by the host (file dialogs, file I/O).
 #[derive(Default)]
 pub struct Services {
+    /// Host-configured reader: only document opening and reading commands are available.
+    pub view_only: bool,
     /// Desktop: discover configured printers on a worker.
     pub printers: Option<printing::Discover>,
     /// Desktop: submit the PDF with the chosen settings on a worker.

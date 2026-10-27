@@ -49,6 +49,14 @@ fn equation_menu(app: &mut WordApp, ui: &mut Ui) {
 }
 
 pub(super) fn context_menu(app: &mut WordApp, ui: &mut Ui) {
+    if app.services.view_only {
+        let selected = app.session.selected_text();
+        if ui.add_enabled(!selected.is_empty(), egui::Button::new(tl!("Copy"))).clicked() {
+            ui.ctx().copy_text(selected);
+            ui.close();
+        }
+        return;
+    }
     if app.session.math.is_some() {
         return equation_menu(app, ui);
     }

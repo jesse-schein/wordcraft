@@ -69,6 +69,8 @@ pub fn start() {
                     session.system_region = region;
                     let messages = Rc::new(RefCell::new(Vec::new()));
                     let mut services = services(inbox.clone(), cc.egui_ctx.clone(), dirty, saves.clone(), messages.clone());
+                    let view_only = query_param("view-only").is_some();
+                    services.view_only = view_only;
                     if let Some(bridge) = &app_bridge {
                         bridge.connect(&mut services, inbox.clone(), cc.egui_ctx.clone());
                     }
@@ -87,8 +89,11 @@ pub fn start() {
                     }
                     let mut prefs = crate::prefs::PrefsSync::new(stored);
                     // No document to show: start on File › Home, as the desktop app does (#766).
-                    if !sample {
+                    if !sample && !view_only {
                         app.start_screen();
+                    }
+                    if view_only {
+                        let _ = app.run("view.printLayout", serde_json::json!({}));
                     }
                     // The host's name for the user signs this visit's work, but isn't stored as the
                     // browser's own preference, which a visit outside the host would restore.
@@ -155,6 +160,14 @@ impl eframe::App for WebShell {
             self.app.status(msg);
         }
         self.app.logic(ctx);
+        if self.app.services.view_only {
+            self.app.session.view.single_column = true;
+            self.app.session.view.multi_page = false;
+            self.app.session.view.ruler = false;
+        }
+        if self.app.services.view_only && self.app.session.view.read_mode {
+            let _ = self.app.run("view.printLayout", serde_json::json!({}));
+        }
         // Store changed preferences straight away: a reload or closed tab runs no exit code (#2132).
         if let Some(json) = self.prefs.changed(&self.app) {
             match local_storage() {

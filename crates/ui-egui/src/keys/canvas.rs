@@ -16,6 +16,17 @@ pub fn canvas_events(app: &mut WordApp, ctx: &egui::Context) {
         return;
     }
     let events = ctx.input(|i| i.events.clone());
+    if app.services.view_only {
+        for e in &events {
+            if matches!(e, egui::Event::Copy) {
+                let selected = app.session.selected_text();
+                if !selected.is_empty() {
+                    ctx.copy_text(selected);
+                }
+            }
+        }
+        return;
+    }
     let window = app.windows.shown();
     if app.session.view.read_mode {
         // Read Mode is for navigation and selection, not typing into the document. The ribbon's
