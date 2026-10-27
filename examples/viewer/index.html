@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WordCraft Viewer</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f2f1ed;color:#20282a;font:15px system-ui,sans-serif}header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 24px;background:#fff;border-bottom:1px solid #d9dedb}h1{font-size:17px;margin:0}.badge{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#53786d;font-weight:700;margin-bottom:3px}main{padding:16px 24px}.toolbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px}.button{background:#285d4e;color:#fff;border:0;border-radius:6px;padding:10px 16px;cursor:pointer;font:inherit;font-weight:600}.button:focus-visible,.button:focus-within{outline:3px solid #a8cabe}.secondary{background:#fff;color:#285d4e;border:1px solid #cbd4ce}.secondary:disabled{opacity:.45;cursor:default}input{position:absolute;opacity:0;width:1px;height:1px}.status{color:#596662;font-size:13px}iframe{display:block;width:100%;height:calc(100vh - 145px);min-height:460px;border:1px solid #cbd4ce;border-radius:8px;background:#fff}@media(max-width:650px){header,main{padding:12px}iframe{height:65vh;min-height:400px}}
+</style></head>
+<body><header><div><div class="badge">Local browser demo</div><h1>WordCraft Viewer</h1></div></header>
+<main><div class="toolbar"><label class="button">Choose a DOCX<input id="file" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label><button class="button secondary" id="download" disabled>Download original</button><span id="status" class="status" role="status">Loading viewer…</span></div>
+<iframe id="viewer" src="../../dist/web/?host=parent&amp;view-only" title="WordCraft document viewer"></iframe></main>
+<script>
+const frame = document.getElementById('viewer');
+const file = document.getElementById('file');
+const status = document.getElementById('status');
+const download = document.getElementById('download');
+let ready = false;
+let pending = null;
+let original = null;
+let selection = 0;
+async function openFile() {
+  if (!ready || !pending) return;
+  const selected = pending;
+  const current = selection;
+  pending = null;
+  try {
+    const bytes = await selected.arrayBuffer();
+    if (current !== selection) return;
+    frame.contentWindow.postMessage({type: 'wordcraft:open', name: selected.name, bytes}, location.origin, [bytes]);
+    original = selected;
+    download.disabled = false;
+    status.textContent = `Sent ${selected.name} to the viewer.`;
+  } catch (err) { status.textContent = `Could not read file: ${err.message}`; }
+}
+file.addEventListener('change', () => { pending = file.files[0] || null; if (pending) { selection++; file.value = ''; status.textContent = ready ? 'Loading file…' : 'Waiting for viewer…'; openFile(); } });
+download.addEventListener('click', () => {
+  if (!original) return;
+  const url = URL.createObjectURL(original);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = original.name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+window.addEventListener('message', event => {
+  if (event.origin !== location.origin || event.source !== frame.contentWindow) return;
+  if (event.data?.type === 'wordcraft:ready') { ready = true; status.textContent = 'Choose a DOCX to view.'; openFile(); }
+  if (event.data?.type === 'wordcraft:failed') status.textContent = `Viewer failed to start: ${event.data.error}`;
+});
+</script></body></html>

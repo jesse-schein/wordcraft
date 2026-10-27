@@ -86,3 +86,12 @@ WordCraft renders with wgpu. It uses **WebGPU** when the browser has it and fall
 For example: `<iframe src="https://example.com/wordcraft/?webgl" ...>`.
 
 A browser with neither WebGPU nor WebGL2 gets a message in place of the app.
+
+## View-only mode
+
+Use `?view-only` for a vertically scrolling, single-column document viewer with navigation and
+zoom controls. Editing commands and formatting controls are disabled. This client-side mode is
+not a security or authorization boundary. It uses the regular web bundle; it does not reduce the
+bundle size. Combine it with `?host=parent&view-only` to load document bytes through the
+same-origin parent bridge. A local example, including an original-file download, is in
+`examples/viewer/README.md`.
